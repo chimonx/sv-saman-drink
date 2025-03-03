@@ -1,38 +1,55 @@
-require("dotenv").config();
-const express = require("express");
-const axios = require("axios");
-const admin = require("firebase-admin");
-const cors = require("cors");
-const bodyParser = require("body-parser");
+// Import the functions you need from the SDKs you need
+import { initializeApp } from "firebase/app";
+import { getFirestore, collection, addDoc, updateDoc, doc } from "firebase/firestore";
+import { getAnalytics } from "firebase/analytics";
+import axios from "axios";
+import express from "express";
+import cors from "cors";
+import bodyParser from "body-parser";
+import dotenv from "dotenv";
+
+// Load environment variables from .env file
+dotenv.config();
+
+// Firebase configuration
+const firebaseConfig = {
+  apiKey: process.env.FIREBASE_API_KEY,
+  authDomain: process.env.FIREBASE_AUTH_DOMAIN,
+  databaseURL: process.env.FIREBASE_DATABASE_URL,
+  projectId: process.env.FIREBASE_PROJECT_ID,
+  storageBucket: process.env.FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: process.env.FIREBASE_MESSAGING_SENDER_ID,
+  appId: process.env.FIREBASE_APP_ID,
+  measurementId: process.env.FIREBASE_MEASUREMENT_ID
+};
 
 // Initialize Firebase
-const serviceAccount = require("./firebaseServiceAccount.json");
-admin.initializeApp({
-  credential: admin.credential.cert(serviceAccount),
-});
-const db = admin.firestore();
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+const analytics = getAnalytics(app);
 
-const app = express();
-app.use(cors());
-app.use(bodyParser.json());
+// Initialize Express app
+const server = express();
+server.use(cors());
+server.use(bodyParser.json());
 
 // LINE Messaging API
 const LINE_ACCESS_TOKEN = process.env.LINE_ACCESS_TOKEN;
 const LINE_API_URL = "https://api.line.me/v2/bot/message/push";
 
 // 📌 1. API รับออเดอร์จากลูกค้า
-app.post("/order", async (req, res) => {
+server.post("/order", async (req, res) => {
   try {
     const { userId, name, drink, note } = req.body;
 
-    // บันทึกออเดอร์ลง Firebase
-    const orderRef = await db.collection("orders").add({
+    // บันทึกออเดอร์ลง Firebase Firestore
+    const orderRef = await addDoc(collection(db, "orders"), {
       userId,
       name,
       drink,
       note,
       status: "กำลังทำ", // สถานะเริ่มต้น
-      createdAt: admin.firestore.Timestamp.now(),
+      createdAt: new Date(),
     });
 
     // แจ้งเตือนลูกค้าผ่าน LINE OA
@@ -62,12 +79,13 @@ app.post("/order", async (req, res) => {
 });
 
 // 📌 2. API ให้สตาฟอัปเดตสถานะออเดอร์
-app.post("/update-order", async (req, res) => {
+server.post("/update-order", async (req, res) => {
   try {
     const { orderId, status, userId } = req.body;
 
-    // อัปเดตสถานะใน Firebase
-    await db.collection("orders").doc(orderId).update({ status });
+    // อัปเดตสถานะใน Firebase Firestore
+    const orderDocRef = doc(db, "orders", orderId);
+    await updateDoc(orderDocRef, { status });
 
     // แจ้งเตือนลูกค้าผ่าน LINE OA
     let message = "";
@@ -97,7 +115,8 @@ app.post("/update-order", async (req, res) => {
   }
 });
 
+// Start the server
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => {
+server.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
