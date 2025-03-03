@@ -21,62 +21,72 @@ const firebaseConfig = {
 };
 
 // Initialize Firebase and Firestore
-const app = initializeApp(firebaseConfig);
-const db = getFirestore(app);
+const firebaseApp = initializeApp(firebaseConfig);
+const db = getFirestore(firebaseApp);
 
 // Initialize Express
 const server = express();
 server.use(cors());
 server.use(bodyParser.json());
 
-// LINE Messaging API
+// LINE Messaging API configuration (using reply endpoint for webhook responses)
 const LINE_ACCESS_TOKEN = process.env.LINE_ACCESS_TOKEN;
 const LINE_API_URL = "https://api.line.me/v2/bot/message/reply";
 
-// Webhook URL
+// Webhook endpoint for receiving events from LINE
 server.post("/webhook", async (req, res) => {
+  console.log("Webhook received:", req.body);
   const events = req.body.events;
-
-  for (let event of events) {
-    const replyToken = event.replyToken;
-    const userId = event.source.userId;
-    const message = event.message.text;
-
-    // คุณสามารถใส่เงื่อนไขเพื่อทำการตอบกลับข้อความตามประเภทที่ได้รับ เช่น คำสั่งที่ผู้ใช้พิมพ์
-    let replyMessage = "คุณส่งข้อความ: " + message;
-
-    if (message === "สั่งเครื่องดื่ม") {
-      replyMessage = "กรุณากรอกชื่อเครื่องดื่ม";
-    }
-
-    // ส่งข้อความตอบกลับไปยังผู้ใช้
-    await axios.post(
-      LINE_API_URL,
-      {
-        replyToken: replyToken,
-        messages: [
-          {
-            type: "text",
-            text: replyMessage,
-          },
-        ],
-      },
-      {
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${LINE_ACCESS_TOKEN}`,
-        },
+  
+  try {
+    for (let event of events) {
+      const replyToken = event.replyToken;
+      const userId = event.source.userId;
+      const message = event.message.text;
+  
+      // Determine the reply message based on the incoming message
+      let replyMessage = "คุณส่งข้อความ: " + message;
+  
+      if (message === "สั่งเครื่องดื่ม") {
+        replyMessage = "กรุณากรอกชื่อเครื่องดื่ม";
       }
-    );
+  
+      // Send reply message to LINE
+      await axios.post(
+        LINE_API_URL,
+        {
+          replyToken: replyToken,
+          messages: [
+            {
+              type: "text",
+              text: replyMessage,
+            },
+          ],
+        },
+        {
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${LINE_ACCESS_TOKEN}`,
+          },
+        }
+      );
+    }
+  
+    // Respond to LINE to confirm receipt
+    res.status(200).send("OK");
+  } catch (error) {
+    console.error("Error handling webhook:", error);
+    res.status(500).send("Error");
   }
-
-  res.status(200).send("OK");
 });
 
-// API สำหรับรับคำสั่งซื้อ
+// API endpoint for placing orders
 server.post("/order", async (req, res) => {
   try {
     const { userId, name, drink, note } = req.body;
+    console.log("Order request received:", req.body);
+    
+    // Save order in Firestore
     const orderRef = await addDoc(collection(db, "orders"), {
       userId,
       name,
@@ -85,8 +95,11 @@ server.post("/order", async (req, res) => {
       status: "กำลังทำ",
       createdAt: new Date(),
     });
+    
+    // Send confirmation message via LINE (using reply API may not work here because no replyToken available)
+    // If you intend to push message, consider using push endpoint: https://api.line.me/v2/bot/message/push
     await axios.post(
-      LINE_API_URL,
+      "https://api.line.me/v2/bot/message/push",
       {
         to: userId,
         messages: [
@@ -103,26 +116,32 @@ server.post("/order", async (req, res) => {
         },
       }
     );
+    
     res.status(200).json({ message: "Order received", orderId: orderRef.id });
   } catch (error) {
+    console.error("Error placing order:", error);
     res.status(500).json({ error: error.message });
   }
 });
 
-// API สำหรับอัปเดตสถานะออเดอร์
+// API endpoint for updating order status
 server.post("/update-order", async (req, res) => {
   try {
     const { orderId, status, userId } = req.body;
+    console.log("Update order request:", req.body);
+    
     const orderDocRef = doc(db, "orders", orderId);
     await updateDoc(orderDocRef, { status });
+    
     let message = "";
     if (status === "เสร็จแล้ว") {
       message = "🎉 เครื่องดื่มของคุณพร้อมแล้ว! กรุณารับที่เคาน์เตอร์ 🏪";
     } else if (status === "ยกเลิก") {
       message = "❌ คำสั่งซื้อของคุณถูกยกเลิก กรุณาติดต่อร้านค้า";
     }
+    
     await axios.post(
-      LINE_API_URL,
+      "https://api.line.me/v2/bot/message/push",
       {
         to: userId,
         messages: [{ type: "text", text: message }],
@@ -134,8 +153,10 @@ server.post("/update-order", async (req, res) => {
         },
       }
     );
+    
     res.status(200).json({ message: "Order updated" });
   } catch (error) {
+    console.error("Error updating order:", error);
     res.status(500).json({ error: error.message });
   }
 });
