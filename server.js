@@ -92,15 +92,48 @@ server.post("/order", async (req, res) => {
       status: "กำลังทำ",
       createdAt: new Date(),
     });
-    // Using push API since replyToken is not available here
+
+    // Using push API to send message with Flex layout
     await axios.post(
       "https://api.line.me/v2/bot/message/push",
       {
         to: userId,
         messages: [
           {
-            type: "text",
-            text: `☕ ออเดอร์ของคุณถูกยืนยันแล้ว!\n\n📌 ${drink}\n📝 ${note}\n\nกรุณารอประมาณ 5-10 นาที ⏳`,
+            type: "flex",
+            altText: "ยืนยันการสั่งเครื่องดื่ม",
+            contents: {
+              type: "bubble",
+              body: {
+                type: "box",
+                layout: "vertical",
+                contents: [
+                  {
+                    type: "text",
+                    text: "ออเดอร์ของคุณถูกยืนยันแล้ว!",
+                    weight: "bold",
+                    size: "xl",
+                    color: "#00796b",
+                  },
+                  {
+                    type: "text",
+                    text: `📌 ${drink}\n📝 ${note}`,
+                    wrap: true,
+                    margin: "md",
+                    color: "#555555",
+                    size: "md",
+                  },
+                  {
+                    type: "text",
+                    text: "กรุณารอประมาณ 5-10 นาที ⏳",
+                    wrap: true,
+                    margin: "md",
+                    color: "#888888",
+                    size: "sm",
+                  },
+                ],
+              },
+            },
           },
         ],
       },
@@ -111,6 +144,7 @@ server.post("/order", async (req, res) => {
         },
       }
     );
+
     res.status(200).json({ message: "Order received", orderId: orderRef.id });
   } catch (error) {
     console.error("Error placing order:", error);
@@ -125,17 +159,69 @@ server.post("/update-order", async (req, res) => {
     console.log("Update order request:", req.body);
     const orderDocRef = doc(db, "orders", orderId);
     await updateDoc(orderDocRef, { status });
-    let message = "";
+    
+    let statusText = "";
     if (status === "เสร็จแล้ว") {
-      message = "🎉 เครื่องดื่มของคุณพร้อมแล้ว! กรุณารับที่เคาน์เตอร์ 🏪";
+      statusText = "เครื่องดื่มของคุณพร้อมแล้ว!";
     } else if (status === "ยกเลิก") {
-      message = "❌ คำสั่งซื้อของคุณถูกยกเลิก กรุณาติดต่อร้านค้า";
+      statusText = "คำสั่งซื้อของคุณถูกยกเลิก กรุณาติดต่อร้านค้า";
+    } else {
+      statusText = `สถานะออเดอร์: ${status}`;
     }
+
+    // ส่งข้อความแจ้งสถานะด้วย LINE Flex Message
+    const flexMessage = {
+      type: "flex",
+      altText: "แจ้งสถานะออเดอร์",
+      contents: {
+        type: "bubble",
+        body: {
+          type: "box",
+          layout: "vertical",
+          spacing: "md",
+          contents: [
+            {
+              type: "text",
+              text: "สถานะออเดอร์",
+              weight: "bold",
+              size: "xl",
+              color: "#00796b",
+            },
+            {
+              type: "text",
+              text: statusText,
+              wrap: true,
+              margin: "md",
+              color: "#555555",
+              size: "md",
+            },
+          ],
+        },
+        footer: {
+          type: "box",
+          layout: "vertical",
+          spacing: "sm",
+          contents: [
+            {
+              type: "button",
+              style: "primary",
+              action: {
+                type: "uri",
+                label: "ดูรายละเอียด",
+                uri: "https://sv-saman-drink.onrender.com", // เปลี่ยนเป็น URL ที่คุณต้องการ
+              },
+            },
+          ],
+          flex: 0,
+        },
+      },
+    };
+
     await axios.post(
       "https://api.line.me/v2/bot/message/push",
       {
         to: userId,
-        messages: [{ type: "text", text: message }],
+        messages: [flexMessage],
       },
       {
         headers: {
