@@ -31,9 +31,49 @@ server.use(bodyParser.json());
 
 // LINE Messaging API
 const LINE_ACCESS_TOKEN = process.env.LINE_ACCESS_TOKEN;
-const LINE_API_URL = "https://api.line.me/v2/bot/message/push";
+const LINE_API_URL = "https://api.line.me/v2/bot/message/reply";
 
-// API รับออเดอร์จากลูกค้า
+// Webhook URL
+server.post("/webhook", async (req, res) => {
+  const events = req.body.events;
+
+  for (let event of events) {
+    const replyToken = event.replyToken;
+    const userId = event.source.userId;
+    const message = event.message.text;
+
+    // คุณสามารถใส่เงื่อนไขเพื่อทำการตอบกลับข้อความตามประเภทที่ได้รับ เช่น คำสั่งที่ผู้ใช้พิมพ์
+    let replyMessage = "คุณส่งข้อความ: " + message;
+
+    if (message === "สั่งเครื่องดื่ม") {
+      replyMessage = "กรุณากรอกชื่อเครื่องดื่ม";
+    }
+
+    // ส่งข้อความตอบกลับไปยังผู้ใช้
+    await axios.post(
+      LINE_API_URL,
+      {
+        replyToken: replyToken,
+        messages: [
+          {
+            type: "text",
+            text: replyMessage,
+          },
+        ],
+      },
+      {
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${LINE_ACCESS_TOKEN}`,
+        },
+      }
+    );
+  }
+
+  res.status(200).send("OK");
+});
+
+// API สำหรับรับคำสั่งซื้อ
 server.post("/order", async (req, res) => {
   try {
     const { userId, name, drink, note } = req.body;
@@ -69,7 +109,7 @@ server.post("/order", async (req, res) => {
   }
 });
 
-// API ให้สตาฟอัปเดตสถานะออเดอร์
+// API สำหรับอัปเดตสถานะออเดอร์
 server.post("/update-order", async (req, res) => {
   try {
     const { orderId, status, userId } = req.body;
@@ -100,6 +140,7 @@ server.post("/update-order", async (req, res) => {
   }
 });
 
+// Start Express Server
 const PORT = process.env.PORT || 5000;
 server.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
