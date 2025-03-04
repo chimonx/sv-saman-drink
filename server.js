@@ -177,7 +177,7 @@ server.post("/update-order", async (req, res) => {
             contents: [
               {
                 type: "text",
-                text: "ออเดอร์ของคุณพร้อมเสิร์ฟแล้ว!",
+                text: "ออเดอร์พร้อมเสิร์ฟแล้ว!",
                 weight: "bold",
                 size: "xl",
                 color: "#00796b",
