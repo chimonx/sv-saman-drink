@@ -1,5 +1,5 @@
 import { initializeApp } from "firebase/app";
-import { getFirestore, collection, addDoc, updateDoc, doc, getDocs } from "firebase/firestore";
+import { getFirestore, collection, addDoc, updateDoc, doc, getDocs, getDoc } from "firebase/firestore";
 import axios from "axios";
 import express from "express";
 import cors from "cors";
@@ -160,62 +160,120 @@ server.post("/update-order", async (req, res) => {
     const orderDocRef = doc(db, "orders", orderId);
     await updateDoc(orderDocRef, { status });
     
-    let statusText = "";
-    if (status === "เสร็จแล้ว") {
-      statusText = "เครื่องดื่มของคุณพร้อมแล้ว!";
-    } else if (status === "ยกเลิก") {
-      statusText = "คำสั่งซื้อของคุณถูกยกเลิก กรุณาติดต่อร้านค้า";
-    } else {
-      statusText = `สถานะออเดอร์: ${status}`;
-    }
-
-    // ส่งข้อความแจ้งสถานะด้วย LINE Flex Message
-    const flexMessage = {
-      type: "flex",
-      altText: "แจ้งสถานะออเดอร์",
-      contents: {
-        type: "bubble",
-        body: {
-          type: "box",
-          layout: "vertical",
-          spacing: "md",
-          contents: [
-            {
-              type: "text",
-              text: "สถานะออเดอร์",
-              weight: "bold",
-              size: "xl",
-              color: "#00796b",
-            },
-            {
-              type: "text",
-              text: statusText,
-              wrap: true,
-              margin: "md",
-              color: "#555555",
-              size: "md",
-            },
-          ],
-        },
-        footer: {
-          type: "box",
-          layout: "vertical",
-          spacing: "sm",
-          contents: [
-            {
-              type: "button",
-              style: "primary",
-              action: {
-                type: "uri",
-                label: "ดูรายละเอียด",
-                uri: "https://sv-saman-drink.onrender.com", // เปลี่ยนเป็น URL ที่คุณต้องการ
+    let flexMessage;
+    if (status === "พร้อมเสิร์ฟ") {
+      // ดึงรายละเอียดออเดอร์ทั้งหมดจาก Firestore
+      const orderDocSnap = await getDoc(orderDocRef);
+      const orderData = orderDocSnap.data();
+      flexMessage = {
+        type: "flex",
+        altText: "ออเดอร์พร้อมเสิร์ฟ",
+        contents: {
+          type: "bubble",
+          body: {
+            type: "box",
+            layout: "vertical",
+            spacing: "md",
+            contents: [
+              {
+                type: "text",
+                text: "ออเดอร์ของคุณพร้อมเสิร์ฟแล้ว!",
+                weight: "bold",
+                size: "xl",
+                color: "#00796b",
               },
-            },
-          ],
-          flex: 0,
+              {
+                type: "text",
+                text: `Order ID: ${orderId}`,
+                wrap: true,
+                margin: "md",
+                size: "sm",
+              },
+              {
+                type: "text",
+                text: `ลูกค้า: ${orderData.name}`,
+                wrap: true,
+                margin: "md",
+                size: "sm",
+              },
+              {
+                type: "text",
+                text: `รายละเอียด: ${orderData.drink}`,
+                wrap: true,
+                margin: "md",
+                size: "sm",
+              },
+              {
+                type: "text",
+                text: `หมายเหตุ: ${orderData.note || '-'}`,
+                wrap: true,
+                margin: "md",
+                size: "sm",
+              },
+              {
+                type: "text",
+                text: `สถานะ: ${status}`,
+                wrap: true,
+                margin: "md",
+                size: "sm",
+              }
+            ],
+          },
         },
-      },
-    };
+      };
+    } else if (status === "ยกเลิก") {
+      flexMessage = {
+        type: "flex",
+        altText: "แจ้งสถานะออเดอร์",
+        contents: {
+          type: "bubble",
+          body: {
+            type: "box",
+            layout: "vertical",
+            spacing: "md",
+            contents: [
+              {
+                type: "text",
+                text: "คำสั่งซื้อของคุณถูกยกเลิก",
+                weight: "bold",
+                size: "xl",
+                color: "#d32f2f",
+              },
+              {
+                type: "text",
+                text: "กรุณาติดต่อร้านค้า",
+                wrap: true,
+                margin: "md",
+                size: "sm",
+              },
+            ],
+          },
+        },
+      };
+    } else {
+      // สำหรับสถานะอื่น ๆ ส่งข้อความแจ้งสถานะง่ายๆ
+      flexMessage = {
+        type: "flex",
+        altText: "แจ้งสถานะออเดอร์",
+        contents: {
+          type: "bubble",
+          body: {
+            type: "box",
+            layout: "vertical",
+            spacing: "md",
+            contents: [
+              {
+                type: "text",
+                text: `สถานะออเดอร์: ${status}`,
+                weight: "bold",
+                size: "xl",
+                color: "#00796b",
+              },
+            ],
+          },
+        },
+      };
+    }
 
     await axios.post(
       "https://api.line.me/v2/bot/message/push",
