@@ -30,7 +30,7 @@ const server = express();
 // Explicitly allow your Netlify domain
 server.use(
   cors({
-    origin: "https://sprightly-lokum-45d0a5.netlify.app",
+    origin: "https://samandev.smobu.cloud",
   })
 );
 server.use(bodyParser.json());
@@ -295,8 +295,17 @@ server.post("/update-order", async (req, res) => {
   }
 });
 
-// API for fetching orders
-server.get("/orders", async (req, res) => {
+// Custom middleware to restrict GET /orders requests by origin
+const restrictOrigin = (req, res, next) => {
+  const allowedOrigin = "https://samandev.smobu.cloud";
+  if (req.headers.origin !== allowedOrigin) {
+    return res.status(403).json({ error: "Access denied" });
+  }
+  next();
+};
+
+// API for fetching orders with origin restriction
+server.get("/orders", restrictOrigin, async (req, res) => {
   try {
     const ordersSnapshot = await getDocs(collection(db, "orders"));
     const orders = [];
