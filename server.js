@@ -1,5 +1,5 @@
 import { initializeApp } from "firebase/app";
-import { getFirestore, collection, addDoc, updateDoc, doc } from "firebase/firestore";
+import { getFirestore, collection, addDoc, updateDoc, doc, getDocs } from "firebase/firestore";
 import axios from "axios";
 import express from "express";
 import cors from "cors";
@@ -233,6 +233,21 @@ server.post("/update-order", async (req, res) => {
     res.status(200).json({ message: "Order updated" });
   } catch (error) {
     console.error("Error updating order:", error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// API for fetching orders
+server.get("/orders", async (req, res) => {
+  try {
+    const ordersSnapshot = await getDocs(collection(db, "orders"));
+    const orders = [];
+    ordersSnapshot.forEach((docSnap) => {
+      orders.push({ id: docSnap.id, ...docSnap.data() });
+    });
+    res.status(200).json({ orders });
+  } catch (error) {
+    console.error("Error fetching orders:", error);
     res.status(500).json({ error: error.message });
   }
 });
